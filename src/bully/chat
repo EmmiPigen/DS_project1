@@ -1,0 +1,112 @@
+import socket
+import sys
+import json
+import threading
+import time
+
+BASE_PORT = 5000
+
+class Node:
+    def __init__(self, node_id, all_nodes):
+        self.id = node_id
+        self.all_nodes = all_nodes  # list of node IDs
+        self.leader_id = None
+        self.status = "Normal"
+        self.alive = True
+
+        # Start a thread to listen for incoming messages
+        threading.Thread(target=self.listen, daemon=True).start()
+
+    def listen(self):
+        """Listen for incoming messages on this node's port."""
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(("localhost", BASE_PORT + self.id))
+        server.listen()
+        print(f"Node {self.id} listening on port {BASE_PORT + self.id}")
+
+        while self.alive:
+            conn, _ = server.accept()
+            msg = json.loads(conn.recv(1024).decode())
+            self.receive_message(msg)
+            conn.close()
+
+    def send_message(self, target_id, msg_type):
+        """Send a message to another node."""
+        msg = {"type": msg_type, "sender": self.id, "receiver": target_id}
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect(("localhost", BASE_PORT + target_id))
+            s.send(json.dumps(msg).encode())
+            s.close()
+        except ConnectionRefusedError:
+            print(f"Node {self.id}: Node {target_id} is down")
+
+    def start_election(self):
+        """Start an election (Bully Algorithm)."""
+        print(f"Node {self.id} starting election...")
+        self.status = "Election"
+
+        higher_nodes = [n for n in self.all_nodes if n > self.id]
+        responses = []
+
+        for n in higher_nodes:
+            self.send_message(n, "ELECTION")
+
+        # Give higher nodes time to respond
+        time.sleep(2)
+
+        if not responses:  # no response, I am the leader
+            self.declare_leader()
+
+    def receive_message(self, msg):
+        """Handle incoming messages."""
+        msg_type = msg["type"]
+        sender = msg["sender"]
+
+        if msg_type == "ELECTION":
+            print(f"Node {self.id} received ELECTION from {sender}")
+            if self.id > sender:
+                self.send_message(sender, "OK")
+                self.start_election()
+
+        elif msg_type == "OK":
+            print(f"Node {self.id} received OK from {sender}")
+            # Just wait for COORDINATOR message
+
+        elif msg_type == "COORDINATOR":
+            self.leader_id = sender
+            self.status = "Normal"
+            print(f"Node {self.id}: Leader is now {sender}")
+
+    def declare_leader(self):
+        """Declare self as leader and inform others."""
+        self.status = "Coordinator"
+        self.leader_id = self.id
+        print(f"Node {self.id} is the new leader!")
+
+        for n in self.all_nodes:
+            if n != self.id:
+                self.send_message(n, "COORDINATOR")
+
+# -------------------
+# Run Node from CLI
+# -------------------
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python node.py <id> <all_nodes_comma_sep>")
+        sys.exit(1)
+
+    node_id = int(sys.argv[1])
+    all_nodes = [int(x) for x in sys.argv[2].split(",")]
+
+    node = Node(node_id, all_nodes)
+
+    # Manual control loop
+    while True:
+        cmd = input(f"Node {node_id}> ").strip()
+        if cmd == "election":
+            node.start_election()
+        elif cmd == "leader":
+            print(f"Current leader: {node.leader_id}")
+        elif cmd == "quit":
+            break
