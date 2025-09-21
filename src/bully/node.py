@@ -14,11 +14,12 @@ PORT_BASE = 5000
 
 
 class Node:
-    def __init__(self, nodeId, knownNodes, network):
+    def __init__(self, nodeId, knownNodes, hostMap):
         self.id = nodeId
         self.status = "Normal"
         self.isLeader = False
         self.knownNodes = knownNodes
+        self.hostMap = hostMap
         self.messageQueue = []
         self.queueLock = threading.Lock()
         self.stateLock = threading.Lock()
@@ -34,11 +35,11 @@ class Node:
 
     def listen(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind(("localhost", PORT_BASE + self.id))
+        server.bind(("0.0.0.0", PORT_BASE + self.id))
         server.listen()
 
         print(
-            f"[{self.getTime()}] Node {self.id} is listening on Port {PORT_BASE + self.id}"
+            f"Node {self.id} is listening on Port {PORT_BASE + self.id}"
         )
 
         server.settimeout(1.0)  # Timeout to periodically check self.alive
@@ -48,7 +49,7 @@ class Node:
                 msg = json.loads(conn.recv(1024).decode("utf-8"))
                 receivedDict = Message(msg["type"], msg["senderId"], msg["targetId"])
                 print(
-                    f"[{self.getTime()}] Queued message: {receivedDict.msgType} from Node {receivedDict.senderId}"
+                    f"Queued message: {receivedDict.msgType} from Node {receivedDict.senderId}"
                 )
                 with self.queueLock:
                     self.messageQueue.append(receivedDict)
@@ -64,116 +65,105 @@ class Node:
 
     def setCurrentLeader(self):
         # Set self as leader
-        print(f"[{self.getTime()}] Node {self.id} is setting itself as leader.")
-        if self.isLeader:
-            return  # Already leader
+      if not self.isLeader:
         self.status = "Leader"
+        print(f"Node {self.id} is setting itself as leader.")
         self.isLeader = True
         self.leaderId = self.id
 
-        print(f"[{self.getTime()}] Node {self.id} broadcasting COORDINATOR message.")
+        print(f"Node {self.id} broadcasting COORDINATOR message.")
         self.broadcast(Message("COORDINATOR", self.id, None))
 
     def startElection(self, knownNodes):
       with self.stateLock:
         if self.status == "Election":
-            print(f"[{self.getTime()}] Node {self.id} is already in an election.")
+            print(f"Node {self.id} is already in an election.")
             return
         self.status = "Election"
         self.receivedOk = False
         self.leaderId = None
+        self.electionEvent = threading.Event() # Event to signal election result
 
       higherNodes = [n for n in knownNodes if n > self.id]
       if not higherNodes:
         self.setCurrentLeader()
         return
 
-      # Event to wait for OK or COORDINATOR
-      self.electionEvent = threading.Event()
-
       # Send ELECTION messages
       for highnode in higherNodes:
         self.sendMessage(highnode, Message("ELECTION", self.id, highnode))
 
       # Wait up to timeout seconds
-      timeout = 5
+      timeout = 10
       event_set = self.electionEvent.wait(timeout=timeout)
 
       with self.stateLock:
-        if self.leaderId is None and not self.receivedOk:
-          # No higher node responded
-          print(f"[{self.getTime()}] Node {self.id} did not receive any OK messages.")
-          self.setCurrentLeader()
+        #Check 1: Did we receive an COORDINATOR message?
+        if self.leaderId is not None:
+          print(f"Node {self.id} received COORDINATOR message from Node {self.leaderId}.")
+          self.status = "Normal"
+          return
+        
+        #Check 2: Did we receive any OK messages?
+        if self.receivedOk:
+          print(f"Node {self.id} received OK messages, waiting for COORDINATOR.")
+          self.status = "Normal"
+          return
+        
+        #Check 3: Timeout reached without any OK or COORDINATOR messages
+        print(f"Node {self.id} did not receive any OK messages or COORDINATOR within timeout.")
+        self.setCurrentLeader()
         self.status = "Normal"
-
-
-    # def startElection(self, knownNodes):
-    #     print(f"[{self.getTime()}] Node {self.id} is initializing an election")
-    #     self.status = "Election"
-    #     self.receivedOk = False
-    #     self.leaderId = None
-
-    #     # Getting all nodes with higher ID than self
-    #     higherNodes = [n for n in knownNodes if n > self.id]
-    #     if not higherNodes:
-    #         self.setCurrentLeader()
-    #         return
-
-    #     for highnode in higherNodes:
-    #         self.sendMessage(highnode, Message("ELECTION", self.id, highnode))
-
-    #     timeout = 5  # seconds
-    #     start_time = time.time()
-    #     while time.time() - start_time < timeout:
-    #       time.sleep(0.1)
-    #       with self.stateLock:
-    #         # If no OK received within timeout, declare self as leader
-    #         if self.leaderId is not None:
-    #             return  # Leader has been set by COORDINATOR message
-
-    #     #Timeout reached
-    #     with self.stateLock:
-    #       if self.leaderId is None:
-    #         print(f"[{self.getTime()}] Node {self.id} did not receive any OK messages.")
-    #         self.setCurrentLeader()
-
+                
     def acknowledgeElection(self, senderId):
         print(
-            f"[{self.getTime()}] Node {self.id} acknowledges election from Node {senderId}."
+            f"Node {self.id} acknowledges election from Node {senderId}."
         )
         self.sendMessage(senderId, Message("OK", self.id, senderId))
         time.sleep(1)  # Give time for OK to be sent before starting own election
 
-    def receiveMessage(self, msg):
-      if msg.msgType == "ELECTION":
-        if self.id > msg.senderId:
-            self.sendMessage(msg.senderId, Message("OK", self.id, msg.senderId))
-            # Only start election if not already in one
+    def handleMessage(self, msg):
+      match msg.msgType:
+        
+        case "ELECTION":
+          if self.id > msg.senderId:
+            self.acknowledgeElection(msg.senderId)
+            
+            if self.isLeader:
+              #If already leader, no need to start another election
+              self.sendMessage(msg.senderId, Message("COORDINATOR", self.id, msg.senderId))
+              return
+              
             threading.Thread(target=self.startElection, args=(self.knownNodes,), daemon=True).start()
-        else:
-            print(f"[{self.getTime()}] Node {self.id} received ELECTION from Node {msg.senderId}, waiting for COORDINATOR.")
-
-
-      elif msg.msgType == "OK":
-            # Wait for COORDINATOR message as higher node is alive
-            print(
-                f"[{self.getTime()}] Node {self.id} received OK from Node {msg.senderId}."
-            )
+        
+        case "OK":
+          print(f"Node {self.id} received OK from Node {msg.senderId}.")
+          with self.stateLock:
             self.receivedOk = True
-
-      elif msg.msgType == "COORDINATOR":
-            # Set the sender as leader as it has the highest ID
-            self.leaderId = msg.senderId
-            self.status = "Normal"
-            self.isLeader = self.id == msg.senderId
-            print(
-                f"[{self.getTime()}] Node {self.id} acknowledges Node {msg.senderId} as leader."
-            )
-
+            if self.status == "Election":
+              self.electionEvent.set()  # Stop waiting for election
+        
+        case "COORDINATOR":
+          self.leaderId = msg.senderId
+          self.status = "Normal"
+          self.isLeader = False
+          print(f"Node {self.id} acknowledges Node {msg.senderId} as leader.")
+          with self.stateLock:
+            if self.status == "Election":
+              self.electionEvent.set()  # Stop waiting for election
+        
+        case "REQUEST":
+          #Recieved a request from another node, reply back to message
+          print(f"Node {self.id} received REQUEST from Node {msg.senderId}.")
+          self.sendMessage(msg.senderId, Message("REPLY", self.id, msg.senderId))
+        
+        case "REPLY":
+          print(f"Node {self.id} received REPLY from Node {msg.senderId}.")
+          
     def sendMessage(self, targetId, msg):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect(("localhost", PORT_BASE + targetId))
+            s.connect((self.hostMap[targetId], PORT_BASE + targetId))
             s.sendall(json.dumps(msg.to_dict()).encode("utf-8"))
             s.close()
             print(
@@ -195,7 +185,7 @@ class Node:
                 ).start()
 
     def broadcast(self, msg):
-        print(f"[{self.getTime()}] Node {self.id} broadcasting message: {msg.msgType}")
+        print(f"Node {self.id} broadcasting message: {msg.msgType}")
         for n in self.knownNodes:
             if n != self.id:
                 try:
@@ -210,8 +200,7 @@ class Node:
                 if self.messageQueue:
                     msg = self.messageQueue.pop(0)
             if msg:
-                self.receiveMessage(msg)
-            time.sleep(0.1)  # Avoid busy waiting
+                self.handleMessage(msg)
 
     def getTime(self):
         return time.strftime("%H:%M:%S", time.localtime())
@@ -248,10 +237,12 @@ if __name__ == "__main__":
                 threading.Thread(target=node.processMessages, daemon=True).start()
                 print(f"Node {nodeId} has revived.")
                 # On revival, if node was leader before, it should send COORDINATOR message as well
-                if node.isLeader:
+                if node.id == max(node.knownNodes):
                     node.broadcast(Message("COORDINATOR", node.id, None))
                     node.leaderId = node.id
                     node.status = "Leader"
+                else: #Node was not highest, start election to find current leader
+                    node.startElection(node.knownNodes)
 
             else:
                 print(f"Node {nodeId} is already alive.")
