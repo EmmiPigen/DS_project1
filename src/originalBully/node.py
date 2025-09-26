@@ -44,10 +44,6 @@ class Node:
     time.sleep(5)  # Wait for other nodes to start
     if self.id == max(self.knownNodes):
       self.setCurrentLeader()
-    else:
-      threading.Thread(
-          target=self.startElection, args=(self.knownNodes,), daemon=True
-      ).start()
 
   def listen(self):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -281,6 +277,7 @@ if __name__ == "__main__":
   # Manual control loop
   while True:
     cmd = input(f"Node {nodeId} > ").strip()
+    
     if cmd == "election":
       threading.Thread(
           target=node.startElection, args=(node.knownNodes,), daemon=True
