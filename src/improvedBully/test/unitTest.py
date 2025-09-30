@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import threading
-from node import Node
+from nodeImproved import Node
 from utility.message import Message
 
 

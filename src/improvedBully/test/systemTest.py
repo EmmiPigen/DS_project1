@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 import threading
 import time
-from node import Node
+from nodeImproved import Node
 from utility.message import Message
 
 

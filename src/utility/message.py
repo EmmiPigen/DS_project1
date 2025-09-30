@@ -1,4 +1,4 @@
-#src/bully/message.py
+#src/utility/message.py
 
 #Class for the message type used by nodes
 

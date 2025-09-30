@@ -1,6 +1,6 @@
 #!/usr/bin python3
 
-# src/bully/node.py
+# src/originalBully/node.py
 
 # Node class for the bully algorithm.
 import os
@@ -10,7 +10,7 @@ import sys
 import threading
 import json
 import time
-from message import Message
+from utility.message import Message
 
 PORT_BASE = 5000
 SIM_PORT = 6000
