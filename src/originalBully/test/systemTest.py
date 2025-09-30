@@ -1,10 +1,16 @@
 # tests/test_system_bully.py
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+from src.message import Message
+
 import unittest
 from unittest.mock import patch
 import threading
 import time
 from node import Node
-from utility.message import Message
 
 
 class TestSystemBully(unittest.TestCase):

@@ -3,14 +3,18 @@
 # src/originalBully/node.py
 
 # Node class for the bully algorithm.
-import os
-from re import S
-import socket
-import sys
-import threading
-import json
+from src.message import Message
 import time
-from utility.message import Message
+import json
+import threading
+import socket
+from re import S
+import os
+import sys
+
+sys.path.append(os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..')))
+
 
 PORT_BASE = 5000
 SIM_PORT = 6000
@@ -71,13 +75,13 @@ class Node:
     return self.isLeader
 
   def setCurrentLeader(self):
-      if self.isLeader:
-        return
-      self.status = "Leader"
-      self.isLeader = True
-      self.leaderId = self.id
-      print(f"Node {self.id} is now the leader.")
-      self.broadcast(Message("COORDINATOR", self.id, None))
+    if self.isLeader:
+      return
+    self.status = "Leader"
+    self.isLeader = True
+    self.leaderId = self.id
+    print(f"Node {self.id} is now the leader.")
+    self.broadcast(Message("COORDINATOR", self.id, None))
 
   def startElection(self, knownNodes):
     with self.stateLock:
@@ -99,7 +103,7 @@ class Node:
       self.sendMessage(highnode, Message("ELECTION", self.id, highnode))
 
     # Wait up to timeout seconds
-    timeout = 10
+    timeout = 15
     event_set = self.electionEvent.wait(timeout=timeout)
 
     with self.stateLock:
@@ -114,12 +118,13 @@ class Node:
       # Check 2: Did we receive any OK messages?
       if self.receivedOk:
         print(
-            f"Node {self.id} received OK messages, waiting for COORDINATOR.")
+            f"Node {self.id} received OK message, waiting for COORDINATOR.")
         self.status = "Normal"
         return
 
       # Check 3: Timeout reached without any OK or COORDINATOR messages
-      print(f"Node {self.id} did not receive any OK messages or COORDINATOR within timeout.")
+      print(
+          f"Node {self.id} did not receive any OK messages or COORDINATOR within timeout.")
       self.setCurrentLeader()
       self.status = "Normal"
 
@@ -135,18 +140,16 @@ class Node:
         if self.id > msg.senderId:
           self.acknowledgeElection(msg.senderId)
 
-          if self.isLeader:
-            # If already leader, no need to start another election
-            self.sendMessage(
-                msg.senderId, Message(
-                    "COORDINATOR", self.id, msg.senderId)
-            )
+          if self.isLeader and self.id == max(self.knownNodes):
+            # If already leader and highest node, respond with COORDINATOR
+
+            # autopep8: off
+            self.sendMessage(msg.senderId, Message("COORDINATOR", self.id, msg.senderId))
             return
 
-          threading.Thread(
-              target=self.startElection, args=(
-                  self.knownNodes,), daemon=True
-          ).start()
+          threading.Thread(target=self.startElection, args=(self.knownNodes,), daemon=True).start()
+
+          # autopep8: on
 
       case "OK":
         print(f"Node {self.id} received OK from Node {msg.senderId}.")
@@ -201,6 +204,7 @@ class Node:
       if n != self.id:
         targetMessage = Message(msg.msgType, msg.senderId, n)
         self.sendMessage(n, targetMessage)
+
   def processMessages(self):
     while self.alive:
       msg = None
@@ -222,7 +226,7 @@ class Node:
     # 1. Prepare for response tracking
     is_leader_check = (targetId == self.leaderId) and (
         msg.msgType == "REQUEST")
-    timeout = 7 # seconds to wait
+    timeout = 7  # seconds to wait
 
     if is_leader_check:
       with self.stateLock:
@@ -277,23 +281,22 @@ if __name__ == "__main__":
   # Manual control loop
   while True:
     cmd = input(f"Node {nodeId} > ").strip()
-    
+
     if cmd == "election":
       threading.Thread(
           target=node.startElection, args=(node.knownNodes,), daemon=True
       ).start()
-    
+
     elif cmd == "status":
       print(f"Node {nodeId} status: {node.status}, Leader: {node.leaderId}")
       print(f"Known nodes: {node.knownNodes}")
-    
+
     elif cmd == "die":
       node.alive = False
       node.leaderId = None
       print(f"Node {nodeId} is shutting down.")
       node.status = "Down"
-    
-    
+
     elif cmd == "revive":
       if not node.alive:
         node.alive = True
@@ -311,7 +314,7 @@ if __name__ == "__main__":
 
       else:
         print(f"Node {nodeId} is already alive.")
-    
+
     elif cmd == "contact":
       targetId = int(input("Enter target node ID: "))
       node.sendAndWaitForReply(targetId, Message("REQUEST", nodeId, targetId))
@@ -319,6 +322,6 @@ if __name__ == "__main__":
     elif cmd == "exit":
       node.alive = False
       break
-    
+
     else:
       print("Invalid command")

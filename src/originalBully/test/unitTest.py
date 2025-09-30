@@ -1,9 +1,16 @@
 # tests/test_node.py
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+from src.message import Message
+
 import unittest
 from unittest.mock import patch, MagicMock
 import threading
 from node import Node
-from utility.message import Message
+from ...message import Message
 
 
 class TestNode(unittest.TestCase):

@@ -1,16 +1,22 @@
 #!/usr/bin python3
 
-# src/originalBully/node.py
+# src/improvedBully/node.py
 
-# Node class for the bully algorithm.
+# Node class for the improved bully algorithm.
 import os
+import sys
+
+from matplotlib.pylab import f
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+from src.message import Message
+
 from re import S
 import socket
-import sys
 import threading
 import json
 import time
-from utility.message import Message
 
 PORT_BASE = 5000
 SIM_PORT = 6000
@@ -94,34 +100,48 @@ class Node:
       self.setCurrentLeader()
       return
 
-    # Send ELECTION messages
-    for highnode in higherNodes:
-      self.sendMessage(highnode, Message("ELECTION", self.id, highnode))
+    
+    # Send ELECTION messages to highest node first and wait for reply
+    while self.status == "Election":
+      highestNode = max(higherNodes)
+      print(f"Node {self.id} sending ELECTION to Node {highestNode}.")
+      self.sendMessage(highestNode, Message("ELECTION", self.id, highestNode))
+      
+      #Wait for OK or COORDINATOR messages
+      print(f"Node {self.id} waiting for OK or COORDINATOR message from Node {highestNode}...")
+    
+      timeout = 10
+      event_set = self.electionEvent.wait(timeout=timeout)
+    
+      with self.stateLock:
+        event_set = self.electionEvent.wait(timeout=timeout)
+        #Check 1: Did we receive a COORDINATOR message?
+        if self.leaderId is not None:
+          print(f"Node {self.id} received COORDINATOR message from Node {self.leaderId}.")
+          self.status = "Normal"
+          return
+      
+        #Check 2: Did we receive any OK messages?
+        if self.receivedOk:
+          print(f"Node {self.id} received OK messages, waiting for COORDINATOR.")
+          self.status = "Normal"
+          return
+      
+        #Check 3: Timeout reached without any OK or COORDINATOR messages
+        print(f"Node {self.id} did not receive any OK message or COORDINATOR within timeout.")
+      
+        #Send ELECTION to next highest node
+        higherNodes.remove(highestNode)
+        
+        if higherNodes:
+          continue
+        
+        else:
+          #No more higher nodes, declare self as leader
+          self.setCurrentLeader()
+          self.status = "Normal"
+          return
 
-    # Wait up to timeout seconds
-    timeout = 10
-    event_set = self.electionEvent.wait(timeout=timeout)
-
-    with self.stateLock:
-      # Check 1: Did we receive an COORDINATOR message?
-      if self.leaderId is not None:
-        print(
-            f"Node {self.id} received COORDINATOR message from Node {self.leaderId}."
-        )
-        self.status = "Normal"
-        return
-
-      # Check 2: Did we receive any OK messages?
-      if self.receivedOk:
-        print(
-            f"Node {self.id} received OK messages, waiting for COORDINATOR.")
-        self.status = "Normal"
-        return
-
-      # Check 3: Timeout reached without any OK or COORDINATOR messages
-      print(f"Node {self.id} did not receive any OK messages or COORDINATOR within timeout.")
-      self.setCurrentLeader()
-      self.status = "Normal"
 
   def acknowledgeElection(self, senderId):
     self.sendMessage(senderId, Message("OK", self.id, senderId))
@@ -319,6 +339,7 @@ if __name__ == "__main__":
     elif cmd == "exit":
       node.alive = False
       break
+  
     
     else:
       print("Invalid command")
