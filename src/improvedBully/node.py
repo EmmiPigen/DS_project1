@@ -49,9 +49,9 @@ class Node:
     threading.Thread(target=self.processMessages, daemon=True).start()
 
     # Startup logic
-    time.sleep(5)  # Wait for other nodes to start
-    if self.id == max(self.knownNodes):
-      self.setCurrentLeader()
+    #time.sleep(5)  # Wait for other nodes to start
+    #if self.id == max(self.knownNodes):
+    #  self.setCurrentLeader()
 
   def listen(self):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -112,7 +112,7 @@ class Node:
     self.broadcast(Message("ELECTION", self.id, None))
 
     # Step 2: Wait for OK messages from higher ID nodes
-    timeout = 15  # seconds to wait for OK messages
+    timeout = 10  # seconds to wait for OK messages
     # autopep8: off
     event_set = self.electionEvent.wait(timeout=timeout)  # Wait for OK messages or timeout
     # autopep8: on
@@ -296,7 +296,7 @@ class Node:
       return self.requestReceived  # Return success/failure
 
     return True  # For non-REQUEST messages or non-leader targets, we assume success after send
-
+   
 
 if __name__ == "__main__":
   if len(sys.argv) < 3:
