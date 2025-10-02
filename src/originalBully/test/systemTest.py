@@ -2,7 +2,7 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
 from src.message import Message
 
@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 import threading
 import time
-from node import Node
+from src.originalBully.node import Node
 
 
 class TestSystemBully(unittest.TestCase):
@@ -29,9 +29,9 @@ class TestSystemBully(unittest.TestCase):
     return nodes, leader_ids
 
   def test_original_cluster_election(self):
-    nodes, leaders = self.run_cluster(Node, num_nodes=3)
+    nodes, leaders = self.run_cluster(Node, num_nodes=5)
     # In Bully algorithm, highest ID becomes leader
-    expected = 3
+    expected = [5]
     self.assertTrue(all(l == 3 for l in leaders),
                     f"Leaders elected: {leaders}, expected: {expected}")
 
