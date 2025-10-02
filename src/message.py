@@ -21,3 +21,11 @@ class Message:
     
   def __str__(self):
     return self.__repr__()
+  
+  
+  def __eq__(self, other):
+    if not isinstance(other, Message):
+      return False
+    return (self.msgType == other.msgType and
+            self.senderId == other.senderId and
+            self.targetId == other.targetId)

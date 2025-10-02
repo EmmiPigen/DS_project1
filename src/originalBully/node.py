@@ -3,7 +3,6 @@
 # src/originalBully/node.py
 
 # Node class for the bully algorithm.
-from src.message import Message
 import time
 import json
 import threading
@@ -14,6 +13,7 @@ import sys
 
 sys.path.append(os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', '..')))
+from src.message import Message
 
 
 PORT_BASE = 5000
