@@ -11,6 +11,7 @@ from unittest.mock import patch
 import threading
 import time
 from src.originalBully.node import Node
+import asyncio
 
 
 class TestSystemBully(unittest.TestCase):
@@ -32,7 +33,7 @@ class TestSystemBully(unittest.TestCase):
     nodes, leaders = self.run_cluster(Node, num_nodes=5)
     # In Bully algorithm, highest ID becomes leader
     expected = [5]
-    self.assertTrue(all(l == 3 for l in leaders),
+    self.assertTrue(all(l == 5 for l in leaders),
                     f"Leaders elected: {leaders}, expected: {expected}")
 
     time.sleep(5) # allow some time for the message exchanges

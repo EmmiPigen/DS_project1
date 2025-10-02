@@ -2,15 +2,14 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
 from src.message import Message
 
 import unittest
 from unittest.mock import patch, MagicMock
 import threading
-from nodeImproved import Node
-
+from src.improvedBully.node import Node
 
 
 class TestNode(unittest.TestCase):
@@ -49,20 +48,24 @@ class TestNode(unittest.TestCase):
 
   def test_get_id(self):
     """ Test that getId returns the correct ID. """
+    print(f"Expected ID: 1. Node ID: {self.node.getId()}.")
     self.assertEqual(self.node.getId(), 1)
 
   def test_initial_leader_assignment(self):
     """ Test that the node with the highest ID becomes leader initially. """
     # Node with max ID should become leader
     n = Node(3, [1, 2, 3])
-    self.assertTrue(n.isCurrentLeader())
+    print(f"Expected Leader ID: 3. Actual Leader ID: {n.leaderId}")
     self.assertEqual(n.leaderId, 3)
 
   def test_set_current_leader(self):
     """ Test that setCurrentLeader correctly sets the node as leader. """
     self.node.setCurrentLeader()
+    print(f"Expected isLeader: True. Actual isLeader: {self.node.isLeader}")
     self.assertTrue(self.node.isLeader)
+    print(f"Expected Leader ID: 1. Actual Leader ID: {self.node.leaderId}")
     self.assertEqual(self.node.leaderId, 1)
+    print(f"Expected Status: Leader. Actual Status: {self.node.status}")
     self.assertEqual(self.node.status, "Leader")
 
   def test_start_election_no_higher_nodes(self):

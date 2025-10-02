@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 import threading
 import time
-from nodeImproved import Node
+from DS_project1.src.improvedBully.node import Node
 
 
 class TestSystemBully(unittest.TestCase):
