@@ -31,6 +31,7 @@ class Node:
     self.leaderId = None
     self.receivedOk = False
     self.alive = True
+    
     self.electionRunning = False
     # List to hold IDs of nodes that sent an OK during an election
     self.gotAcknowledgementFrom = -1
@@ -49,8 +50,8 @@ class Node:
     threading.Thread(target=self.processMessages, daemon=True).start()
 
     # Startup logic
-    #time.sleep(5)  # Wait for other nodes to start
-    #if self.id == max(self.knownNodes):
+    # time.sleep(5)  # Wait for other nodes to start
+    # if self.id == max(self.knownNodes):
     #  self.setCurrentLeader()
 
   def listen(self):
@@ -96,8 +97,8 @@ class Node:
       self.status = "Election"
       self.leaderId = None
       self.electionRunning = True
-      # value to compare id's from nodes that sent OK messages, set to -1 to ensure any valid node ID is higher
-      self.gotAcknowledgementFrom = -1
+      # value to compare id's from nodes that sent OK messages, set to own id to compare to
+      self.gotAcknowledgementFrom = self.id
       self.isLeader = False
       self.electionEvent = threading.Event()  # Event to signal election result
 
@@ -119,7 +120,7 @@ class Node:
 
     with self.stateLock:
       # Log who the node got acknowledgements from
-      if self.gotAcknowledgementFrom != -1:
+      if self.gotAcknowledgementFrom != self.id:
         print(f"Highest OK received from Node {self.gotAcknowledgementFrom}.")
 
         # Compare the IDs of nodes that sent OK messages and determine the highest
@@ -147,6 +148,7 @@ class Node:
 
       case "ELECTION":
         self.electionRunning = True
+        self.leaderId = None
         if self.id > msg.senderId:  # Only respond if sender has lower ID
           self.acknowledgeElection(msg.senderId)  # Acknowledge election
 
@@ -296,7 +298,7 @@ class Node:
       return self.requestReceived  # Return success/failure
 
     return True  # For non-REQUEST messages or non-leader targets, we assume success after send
-   
+
 
 if __name__ == "__main__":
   if len(sys.argv) < 3:
@@ -309,49 +311,56 @@ if __name__ == "__main__":
   node = Node(nodeId, knownNodes)
 
   # Manual control loop
-  while True:
-    cmd = input(f"Node {nodeId} > ").strip()
+  try:
+    while True:
+      cmd = input(f"Node {nodeId} > ").strip()
 
-    if cmd == "election":
-      threading.Thread(
-          target=node.startElection, args=(node.knownNodes,), daemon=True
-      ).start()
+      # autopep8: off
+      if cmd == "election":
+        threading.Thread(target=node.startElection, args=(node.knownNodes,), daemon=True).start()
+      # autopep8: on
 
-    elif cmd == "status":
-      print(f"Node {nodeId} status: {node.status}, Leader: {node.leaderId}")
-      print(f"Known nodes: {node.knownNodes}")
+      elif cmd == "status":
+        print(f"Node {nodeId} status: {node.status}, Leader: {node.leaderId}")
+        print(f"Known nodes: {node.knownNodes}")
 
-    elif cmd == "die":
-      node.alive = False
-      node.leaderId = None
-      print(f"Node {nodeId} is shutting down.")
-      node.status = "Down"
+      elif cmd == "die":
+        node.alive = False
+        node.leaderId = None
+        print(f"Node {nodeId} is shutting down.")
+        node.status = "Down"
 
-    elif cmd == "revive":
-      if not node.alive:
-        node.alive = True
-        node.status = "Normal"
-        threading.Thread(target=node.listen, daemon=True).start()
-        threading.Thread(target=node.processMessages, daemon=True).start()
-        print(f"Node {nodeId} has revived.")
-        # On revival, if node was leader before, it should send COORDINATOR message as well
-        if node.id == max(node.knownNodes):
-          node.broadcast(Message("COORDINATOR", node.id, None))
-          node.leaderId = node.id
-          node.status = "Leader"
-        else:  # Node was not highest, start election to find current leader
-          node.startElection(node.knownNodes)
+      elif cmd == "revive":
+        if not node.alive:
+          node.alive = True
+          node.status = "Normal"
+          threading.Thread(target=node.listen, daemon=True).start()
+          threading.Thread(target=node.processMessages, daemon=True).start()
+          print(f"Node {nodeId} has revived.")
+          # On revival, if node was leader before, it should send COORDINATOR message as well
+          if node.id == max(node.knownNodes):
+            node.broadcast(Message("COORDINATOR", node.id, None))
+            node.leaderId = node.id
+            node.status = "Leader"
+          else:  # Node was not highest, start election to find current leader
+            node.startElection(node.knownNodes)
+
+        else:
+          print(f"Node {nodeId} is already alive.")
+
+      elif cmd == "contact":
+        targetId = int(input("Enter target node ID: "))
+        node.sendAndWaitForReply(targetId, Message("REQUEST", nodeId, targetId))
+
+      elif cmd == "exit":
+        node.alive = False
+        break
 
       else:
-        print(f"Node {nodeId} is already alive.")
-
-    elif cmd == "contact":
-      targetId = int(input("Enter target node ID: "))
-      node.sendAndWaitForReply(targetId, Message("REQUEST", nodeId, targetId))
-
-    elif cmd == "exit":
-      node.alive = False
-      break
-
-    else:
-      print("Invalid command")
+        print("Invalid command")
+        
+        
+  except KeyboardInterrupt:
+    node.alive = False
+    print(f"\nNode {nodeId} is shutting down.")
+    

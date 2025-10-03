@@ -9,7 +9,6 @@ SIM_PORT = 6000
 NODE_PORT_BASE = 5000
 MIN_DELAY = 1.0
 MAX_DELAY = 5.0
-DROP_RATE = 0.1
 
 
 class NetworkSimulator:
@@ -18,6 +17,8 @@ class NetworkSimulator:
     self.messageQueue = []
     self.queueLock = threading.Lock()
     self.alive = True
+    self.messageCount = 0
+    self.countMessagesBool = False
 
     # Start listening and processing threads
     threading.Thread(target=self.listen, daemon=True).start()
@@ -25,8 +26,6 @@ class NetworkSimulator:
     threading.Thread(target=self.deliverMessages, daemon=True).start()
 
     print(f"Network Simulator is running on Port {SIM_PORT}")
-    print(
-        f"Latency: {MIN_DELAY}-{MAX_DELAY}s, Loss rate: {DROP_RATE*100}%")
 
   def listen(self):
     """Receives all incoming messages from the connected nodes."""
@@ -46,6 +45,8 @@ class NetworkSimulator:
         conn, _ = server.accept()
         raw_data = conn.recv(1024).decode("utf-8")
         conn.close()
+        if self.countMessagesBool:
+          self.messageCounter()
         self.scheduleDelivery(raw_data)
       except socket.timeout:
         continue
@@ -79,14 +80,14 @@ class NetworkSimulator:
 
         self.messageQueue.sort(key=lambda x: x["deliveryTime"])
 
-        print(
-            f"[SCHEDULE] {msg_data['type']} from {msg_data['senderId']} to {msg_data['targetId']} scheduled for delivery in {delay:.2f}s."
-        )
+        # autopep8: off
+        #print(f"[SCHEDULE] {msg_data['type']} from {msg_data['senderId']} to {msg_data['targetId']} scheduled for delivery in {delay:.2f}s.")
+        # autopep8: on
 
     except json.JSONDecodeError:
-      print(f"Simulator: Received invalid JSON message: {raw_msg}")
+      print(f"[SYSTEM] Received invalid JSON message: {raw_msg}")
     except Exception as e:
-      print(f"Simulator: Error scheduling message: {e}")
+      print(f"[SYSTEM] Error scheduling message: {e}")
 
   def deliverMessages(self):
     """Sends messages once their scheduled time is reached."""
@@ -121,11 +122,21 @@ class NetworkSimulator:
       s.connect(("localhost", targetPort))
       s.sendall(msg["data"].encode("utf-8"))
       s.close()
-      print(f"[DELIVERED] {msg_data['type']} to Node {targetId}.")
+      print(f"[{self.getTime()}] [DELIVERED] {msg_data['type']} to Node {targetId}.")
     except (ConnectionRefusedError, OSError):
       print(
-          f"[FAILURE] Node {targetId} is unreachable (Delivery failed).")
+          f"[{self.getTime()}] [FAILURE] Node {targetId} is unreachable (Delivery failed).")
       # In a real system, the simulator might retry or report this
+
+  def messageCounter(self):
+    """Internal helper to count the incoming messages when enabled"""
+    # If message counting is enabled, count each message as it arrives
+    with self.queueLock:
+      # check if any messages have been received
+      self.messageCount += 1
+
+  def getTime(self):
+    return time.strftime("%H:%M:%S", time.localtime())
 
   def shutdown(self):
     self.alive = False
@@ -141,7 +152,24 @@ if __name__ == "__main__":
 
   try:
     while True:
-      time.sleep(1)
+      cmd = input("").strip().lower()
+
+      if cmd == "count":
+        simulator.countMessagesBool = not simulator.countMessagesBool
+        if simulator.countMessagesBool:
+          simulator.messageCount = 0
+          start_time = time.time()
+          print("[COUNTER] Message counting enabled.")
+        else:
+          elapsed_time = time.time() - start_time
+          print(f"[COUNTER] Total messages received: {simulator.messageCount}")
+          print(f"[COUNTER] Elapsed time: {elapsed_time:.2f} seconds.")
+          print("[COUNTER] Message counting disabled.")
+
+      elif cmd == "exit":
+        print("[SYSTEM] Shutting down simulator.")
+        break
+
   except KeyboardInterrupt:
-    print("Shutting down Network Simulator.")
+    print("[SYSTEM] Shutting down Network Simulator.")
     simulator.shutdown()
