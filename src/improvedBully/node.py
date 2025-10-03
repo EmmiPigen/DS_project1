@@ -133,7 +133,7 @@ class Node:
         return  # End election process here, waiting for COORDINATOR message from the new leader
       # autopep8: on
 
-      #No OK messages received within timeout
+      # Step 1.5: No OK messages received within timeout
       print(f"Node {self.id} did not receive any OK messages within {timeout}s.")
       self.setCurrentLeader()  # Declare self as leader
       self.status = "Normal"
