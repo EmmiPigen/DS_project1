@@ -20,7 +20,6 @@ from src.message import Message
 PORT_BASE = 5000
 SIM_PORT = 6000
 
-
 class Node:
   def __init__(self, nodeId, knownNodes):
     self.id = nodeId
@@ -134,7 +133,7 @@ class Node:
         return  # End election process here, waiting for COORDINATOR message from the new leader
       # autopep8: on
 
-      # Step 1: No OK messages received within timeout
+      #No OK messages received within timeout
       print(f"Node {self.id} did not receive any OK messages within {timeout}s.")
       self.setCurrentLeader()  # Declare self as leader
       self.status = "Normal"
