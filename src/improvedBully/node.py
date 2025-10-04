@@ -298,14 +298,37 @@ class Node:
 
     return True  # For non-REQUEST messages or non-leader targets, we assume success after send
 
+  def restart(self):
+    """Function to restart a failed node. (For testing purposes)"""
+    if self.alive:
+      print(f"Node {self.id} is already running.")
+      return
+    
+    self.alive = True
+    self.status = "Normal"
+    # Restart listening and processing threads
+    threading.Thread(target=self.processMessages, daemon=True).start()
+    
+    print(f"Node {self.id} has restarted.")
+    
+    #Since node was restarted, an election should be started to find current leader
+    self.startElection(self.knownNodes)
 
+  def fail(self):
+    """Function to simulate a node failure. (For testing purposes)"""
+    self.alive = False
+    self.leaderId = None
+    self.status = "Down"
+    print(f"Node {self.id} is shutting down.")
+    # Shutdown listening and processing threads
+    
 if __name__ == "__main__":
   if len(sys.argv) < 3:
-    print("Usage: python node.py <nodeId> <knownNode1> <knownNode2> ...")
+    print("Usage: python node.py <nodeId> <numberOfKnownNodes>")
     sys.exit(1)
 
   nodeId = int(sys.argv[1])
-  knownNodes = list(map(int, sys.argv[2:]))
+  knownNodes = list(range(1, int(sys.argv[2]) + 1)) # Nodes are numbered 1..N
 
   node = Node(nodeId, knownNodes)
 
@@ -324,26 +347,11 @@ if __name__ == "__main__":
         print(f"Known nodes: {node.knownNodes}")
 
       elif cmd == "die":
-        node.alive = False
-        node.leaderId = None
-        print(f"Node {nodeId} is shutting down.")
-        node.status = "Down"
+        node.fail()
 
       elif cmd == "revive":
         if not node.alive:
-          node.alive = True
-          node.status = "Normal"
-          threading.Thread(target=node.listen, daemon=True).start()
-          threading.Thread(target=node.processMessages, daemon=True).start()
-          print(f"Node {nodeId} has revived.")
-          # On revival, if node was leader before, it should send COORDINATOR message as well
-          if node.id == max(node.knownNodes):
-            node.broadcast(Message("COORDINATOR", node.id, None))
-            node.leaderId = node.id
-            node.status = "Leader"
-          else:  # Node was not highest, start election to find current leader
-            node.startElection(node.knownNodes)
-
+          node.restart()
         else:
           print(f"Node {nodeId} is already alive.")
 

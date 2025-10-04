@@ -99,7 +99,8 @@ class NetworkSimulator:
           # Check messages and mark for delivery
         for i, msg in enumerate(self.messageQueue):
           if msg["deliveryTime"] <= now:
-            self._forwardMessage(msg)
+            # Deliver the message using thread to allow concurrent deliveries
+            threading.Thread(target=self._forwardMessage, args=(msg,), daemon=True).start()
             delivered_indices.append(i)
           else:
             # Since the queue is sorted, we can stop checking
@@ -144,10 +145,10 @@ class NetworkSimulator:
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
-    print("Usage: python networkSimulator.py <knownNode1> <knownNode2> ...")
+    print("Usage: python networkSimulator.py <numberOfKnownNodes>")
     sys.exit(1)
 
-  knownNodes = list(map(int, sys.argv[1:]))
+  knownNodes = list(range(1, int(sys.argv[1]) + 1)) # Nodes are numbered 1..N
   simulator = NetworkSimulator(knownNodes)
 
   try:
