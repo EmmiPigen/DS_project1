@@ -55,6 +55,7 @@ class TestNode(unittest.TestCase):
     """ Test that the node with the highest ID becomes leader initially. """
     # Node with max ID should become leader
     n = Node(3, [1, 2, 3])
+    n.startElection(n.knownNodes)
     print(f"Expected Leader ID: 3. Actual Leader ID: {n.leaderId}")
     self.assertEqual(n.leaderId, 3)
 

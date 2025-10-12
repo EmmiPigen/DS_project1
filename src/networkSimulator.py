@@ -12,20 +12,23 @@ MAX_DELAY = 5.0
 
 
 class NetworkSimulator:
-  def __init__(self, knownNodes):
+  def __init__(self, knownNodes, minDelay=MIN_DELAY, maxDelay=MAX_DELAY):
     self.knownNodes = knownNodes
     self.messageQueue = []
     self.queueLock = threading.Lock()
     self.alive = True
     self.messageCount = 0
     self.countMessagesBool = False
+    self.minDelay = minDelay
+    self.maxDelay = maxDelay
 
     # Start listening and processing threads
     threading.Thread(target=self.listen, daemon=True).start()
     # Start thread that delivers messages
     threading.Thread(target=self.deliverMessages, daemon=True).start()
 
-    print(f"Network Simulator is running on Port {SIM_PORT}, with nodes: {self.knownNodes}")
+    print(
+        f"Network Simulator is running on Port {SIM_PORT}, with nodes: {self.knownNodes}")
 
   def listen(self):
     """Receives all incoming messages from the connected nodes."""
@@ -65,7 +68,7 @@ class NetworkSimulator:
       # print(f"Simulator: Dropped message {msg_data}")
       # return
 
-      delay = random.uniform(MIN_DELAY, MAX_DELAY)
+      delay = random.uniform(self.minDelay, self.maxDelay)
       deliveryTime = time.time() + delay
 
       with self.queueLock:
@@ -100,7 +103,8 @@ class NetworkSimulator:
         for i, msg in enumerate(self.messageQueue):
           if msg["deliveryTime"] <= now:
             # Deliver the message using thread to allow concurrent deliveries
-            threading.Thread(target=self._forwardMessage, args=(msg,), daemon=True).start()
+            threading.Thread(target=self._forwardMessage,
+                             args=(msg,), daemon=True).start()
             delivered_indices.append(i)
           else:
             # Since the queue is sorted, we can stop checking
@@ -145,11 +149,13 @@ class NetworkSimulator:
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
-    print("Usage: python networkSimulator.py <Nodes>")
+    print("Usage: python networkSimulator.py <Nodes> <minDelay> <maxDelay>")
     sys.exit(1)
 
-  knownNodes = list(range(1, int(sys.argv[1]) + 1)) # Nodes are numbered 1..N
-  simulator = NetworkSimulator(knownNodes)
+  knownNodes = list(range(1, int(sys.argv[1]) + 1))  # Nodes are numbered 1..N
+  minDelay = float(sys.argv[2]) if len(sys.argv) > 2 else MIN_DELAY
+  maxDelay = float(sys.argv[3]) if len(sys.argv) > 3 else MAX_DELAY
+  simulator = NetworkSimulator(knownNodes, minDelay, maxDelay)
 
   try:
     while True:

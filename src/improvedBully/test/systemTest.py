@@ -1,124 +1,182 @@
-# # tests/test_system_bully.py
+# tests/test_system_bully.py
 
+
+#!/usr/bin/env python3
+"""
+System Test for Improved Bully Algorithm
+----------------------------------------
+Tests leader election, leader failover, and restart behavior
+using the real network simulator and Node implementation.
+"""
 # autopep8: off
+import threading
+import time
+import json
+import socket
+import pytest
 import os
 import sys
-import time
-import threading
-import unittest
-from unittest.mock import patch
 
-# Assumes src.improvedBully.node and src.message are accessible
+from torch import le
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
-from src.improvedBully.node import Node
+
+from src.improvedBully.node import Node, PORT_BASE, SIM_PORT
+from src.networkSimulator import NetworkSimulator
 from src.message import Message
 # autopep8: on
 
+# --- Utility helpers ---------------------------------------------------------
 
-class TestSystemBully(unittest.TestCase):
+
+def wait_until(condition_fn, timeout=10, poll=0.5):
+  """Waits until condition_fn() returns True or timeout occurs."""
+  start = time.time()
+  while time.time() - start < timeout:
+    if condition_fn():
+      return True
+    time.sleep(poll)
+  return False
+
+
+def count_leaders(nodes):
+  return sum(1 for n in nodes if n.isLeader)
+
+
+def get_current_leader(nodes):
+  # All alive nodes should agree on the same leader
+  leaders = [n.leaderId for n in nodes if n.alive]
+  assert all(l == leaders[0] for l in leaders), "Nodes disagree on the leader!"
+  # Get the node object for the leader
+  return get_node_by_id(nodes, leaders[0])
+
+
+def get_node_by_id(nodes, node_id):
+  """Helper to retrieve a node object by its ID."""
+  return next((n for n in nodes if n.id == node_id), None)
+
+
+# --- Fixtures ----------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def network_simulator():
+  """Start the network simulator once for all tests."""
+  known_nodes = [1, 2, 3]
+  sim = NetworkSimulator(known_nodes, minDelay=0.1, maxDelay=0.2)
+  time.sleep(1)
+  yield sim
+  # Teardown
+  sim.shutdown()
+
+
+@pytest.fixture(scope="module")
+def node_cluster(network_simulator):
+  """Start a small cluster of nodes and yield them (IDs 1, 2, 3)."""
+  known_nodes = [1, 2, 3]
+  nodes = [Node(i, known_nodes) for i in known_nodes]
+  time.sleep(3)
+
+  # Ensure initial election completes before tests
+  # Node 1 starts the initial election to establish Node 3 as leader
+  nodes[0].startElection(nodes[0].knownNodes)
+  assert wait_until(lambda: all(n.leaderId == 3 for n in nodes),
+                    timeout=15), "Initial leader election failed to stabilize."
+
+  yield nodes
+  # Teardown: Stop all nodes
+  for n in nodes:
+    n.alive = False
     
-    def setUp(self):
-        print(f"\n=== Starting {self._testMethodName} ===")
-        # Run cluster starts the node threads (as per Node class __init__)
-        self.nodes = self.run_cluster(Node, num_nodes=5)
+
+
+# --- Tests -------------------------------------------------------------------
+
+
+def test_initial_leader_election(node_cluster):
+  """Ensure that a leader is correctly elected (Node 3) and all nodes agree."""
+  nodes = node_cluster
+
+  # Leader election was handled in the fixture, so we just verify the state
+  assert count_leaders(nodes) == 1, "Expected exactly one leader."
+
+  leader = get_current_leader(nodes)
+  # FIX: Add assertion to check if leader is None before accessing its attributes
+  assert leader is not None, "Leader is None, indicating unstable cluster state."
+
+  #
+  assert wait_until(lambda: all(n.leaderId == leader.id for n in nodes if not n.isLeader),
+                    timeout=10, poll=1
+                    ), "Not all nodes agree on the leader."
+# -----------------------------------------------------------------------------------
+
+  # Verification: Node 3 (highest ID) must win
+  print(f"✅ Leader found: Node {leader.id}")
+
+  assert leader.id == 3, f"Expected leader Node 3, but found Node {leader.id}"
+  assert leader.isLeader
+
+
+def test_leader_failure_and_reelection(node_cluster):
+  """Verify that when the current leader (Node 3) fails, Node 2 is elected."""
+  nodes = node_cluster
+  
+  # Get current leader (should be Node 3)
+  leader = get_current_leader(nodes)
+  assert leader is not None  # Should be true from fixture setup
+  assert leader.id == 3
+
+  print(f"💥 Simulating failure of leader Node {leader.id}")
+  leader.fail()
+  assert wait_until(lambda: not leader.alive, timeout=5), "Leader did not fail as expected."
+
+  # Trigger failure detection from Node 1
+  node_1 = get_node_by_id(nodes, 1)
+  assert node_1 is not None
+  print(f"⚠️ Simulating Node {node_1.id} detecting failure and starting election.")
+  threading.Thread(target=node_1.sendAndWaitForReply, args=(leader.id, Message("REQUEST", node_1.id, leader.id)), daemon=True).start()
+  assert wait_until(lambda: node_1.leaderId is None, timeout=10), "Node 1 did not detect leader failure."
+
+  # Node 2 is the highest remaining ID and will attempt to become leader.
+  # Wait for a new leader election
+  assert wait_until(lambda: all(n.leaderId == 2 for n in nodes if n.alive), timeout=20), "New leader election failed to stabilize."
+
+  new_leader = get_current_leader(nodes)
+  assert new_leader is not None, "New leader is None, indicating unstable cluster state."
+
+  print(f"✅ New leader after failure: Node {new_leader.id}")
+  assert new_leader.id == 2, f"Expected leader Node 2, but found Node {new_leader.id}"
+  assert new_leader.isLeader
+
+
+def test_node_restart_triggers_election(node_cluster):
+  """Restart a failed leader (Node 3) and verify it triggers a fresh election and wins."""
+  nodes = node_cluster
+  
+  # Ensure Node 2 is the current leader from previous test
+  interim_leader = get_current_leader(nodes)
+  assert interim_leader is not None  # Should be true from fixture setup
+  assert interim_leader.id == 2 # Ensure starting from known state
+  
+  node_3 = get_node_by_id(nodes, 3)
+  assert node_3 is not None
+  assert not node_3.alive, "Node 3 should be failed before restart test."
+  
+  print(f"🔄 Restarting Node {node_3.id}. Current Leader: Node {interim_leader.id}")
+  node_3.restart()
+  assert wait_until(lambda: node_3.alive, timeout=5), "Node 3 did not restart as expected."
+  
+  # The restart automatically calls startElection()
+  # Wait for election triggered by restart to stabilize (Node 3 should win)
+  assert wait_until(lambda: all(n.leaderId == 3 for n in nodes if n.alive), timeout=20), "Node 3 did not win election after restart."
+  
+  final_leader = get_current_leader(nodes)
+  assert final_leader is not None, "Final leader is None, indicating unstable cluster state."
     
-    def tearDown(self):
-        """ Clean up and stop all node threads. """
-        # CRITICAL: Ensures all node threads are terminated cleanly
-        for n in self.nodes:
-            # Assumes Node class has a stop() method to set self.alive = False
-            # and gracefully close sockets/threads.
-            if n.alive:
-                 # n.stop() and n.join() are highly recommended here!
-                 # For now, we set alive to False and rely on daemon threads to exit
-                 n.alive = False 
-        time.sleep(1) # Give time for daemon threads to finish
-        print(f"=== Finished {self._testMethodName} ===\n")
-        
-    def run_cluster(self, NodeClass, num_nodes=5):
-        nodes = []
-        known_nodes = list(range(1, num_nodes + 1))
+  print(f"✅ Final Leader after restart: Node {final_leader.id}")
+  assert final_leader.id == 3
+  assert final_leader.isLeader
+  assert interim_leader.id == 2  # Check that the former leader 2 is no longer the leader
+  assert interim_leader.isLeader == False
 
-        for i in known_nodes:
-            # Node constructor automatically starts its threads
-            n = NodeClass(i, known_nodes)
-            nodes.append(n)
-
-        time.sleep(2) # Give threads a moment to bind sockets and initialize
-        return nodes
-
-    def waitForAllLeaders(self, expected_id, alive_nodes=None, timeout=20):
-        """ Waits until all specified nodes have set their leaderId to the expected_id. """
-        if alive_nodes is None:
-            alive_nodes = self.nodes
-            
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            # Only check nodes that are meant to be active
-            leaders = [n.leaderId for n in alive_nodes if n.alive and n.leaderId is not None]
-            
-            # Check if all active nodes have set the correct leaderId
-            if len(leaders) == len(alive_nodes) and all(l == expected_id for l in leaders):
-                print(f"\n[TEST] All alive nodes ({len(alive_nodes)}) agreed on Leader {expected_id}.")
-                return True
-            time.sleep(0.5) # Polling interval
-            
-        self.fail(f"Nodes failed to agree on Leader {expected_id} within {timeout}s. Current leaders: {leaders}")
-
-    def test_improved_bully_election(self):
-        
-        # --- SCENARIO 1: Initial Election (Node 5 becomes leader) ---
-        print("\n[TEST] SCENARIO 1: Initial Election.")
-        self.nodes[0].startElection(self.nodes[0].knownNodes)
-        
-        # Wait for all 5 nodes to agree on the highest ID (5)
-        expected_leader_1 = 5
-        self.waitForAllLeaders(expected_leader_1, timeout=10) 
-        
-        leaders = [n.leaderId for n in self.nodes if n.leaderId is not None]
-        self.assertTrue(all(l == expected_leader_1 for l in leaders),
-                        f"Leaders elected: {leaders}, expected: {expected_leader_1}")
-        
-        # --- SCENARIO 2: Leader Failure and Re-election (Node 4 becomes leader) ---
-        print("\n[TEST] SCENARIO 2: Leader (Node 5) failure and Re-election.")
-        
-        # Simulate Node 5 crash (CRITICAL: Must be a clean stop in Node class)
-        self.nodes[4].alive = False
-        self.nodes[4].status = "Down"
-        # Assuming you would add a stop() method to kill the threads in Node 5
-        
-        print(f"\n[TEST] Node {self.nodes[4].id} (Leader) is now down.")
-        
-        # Simulate Node 1 discovering the leader is down (triggers new election)
-        # The sendAndWaitForReply should time out and call startElection()
-        self.nodes[0].sendAndWaitForReply(5, Message("REQUEST", self.nodes[0].id, 5))
-        
-        # The new expected leader is the next highest ID (4)
-        expected_leader_2 = 4
-        alive_nodes_after_failure = self.nodes[:4]
-        self.waitForAllLeaders(expected_leader_2, alive_nodes=alive_nodes_after_failure, timeout=15) 
-
-        leaders = [n.leaderId for n in alive_nodes_after_failure if n.alive and n.leaderId is not None]
-        self.assertTrue(all(l == expected_leader_2 for l in leaders),
-                        f"Leaders elected after failure: {leaders}, expected: {expected_leader_2}")
-        
-        # --- SCENARIO 3: Leader Recovery and Reclaimation (Node 5 revives) ---
-        print("\n[TEST] SCENARIO 3: Original Leader (Node 5) recovery.")
-
-        # Simulate Node 5 recovery (CRITICAL: Must use a proper revive method)
-        self.nodes[4].alive = True
-        self.nodes[4].status = "Normal"
-        # Node 5 needs to restart its threads (listen/processMessages) and call startElection()
-        self.nodes[4].startElection(self.nodes[4].knownNodes) # Starts election on revival
-        
-        # The highest ID (5) should reclaim leadership immediately
-        expected_leader_3 = 5
-        self.waitForAllLeaders(expected_leader_3, timeout=10) 
-        
-        leaders = [n.leaderId for n in self.nodes if n.alive and n.leaderId is not None]
-        self.assertTrue(all(l == expected_leader_3 for l in leaders),
-                        f"Leaders elected after recovery: {leaders}, expected: {expected_leader_3}")
-    
-    
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+# --- End of File -------------------------------------------------------------

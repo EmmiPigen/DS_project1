@@ -96,7 +96,7 @@ class Node:
       time.sleep(1)  # Small delay to avoid message clumping
 
     # Wait up to timeout seconds
-    timeout = 15
+    timeout = 10
     event_set = self.electionEvent.wait(timeout=timeout)
 
     with self.stateLock:
@@ -217,48 +217,46 @@ class Node:
     no reply is received, it triggers an election.
     """
 
-    # 1. Prepare for response tracking
-    is_leader_check = (targetId == self.leaderId) and (
-        msg.msgType == "REQUEST")
-    timeout = 7  # seconds to wait
+    # Step 1: prepare for response tracking
+    timeout = 3  # seconds to wait for a reply
+    self.gotReply = False
+    self.expectedReplyFrom = targetId
 
-    if is_leader_check:
+    # Check if we are sending a REQUEST to the current leader
+    is_leader = (targetId == self.leaderId) and (msg.msgType == "REQUEST")
+
+    #
+    if is_leader:
       with self.stateLock:
-        self.awaitingReplyFrom = targetId
-        self.requestReceived = False
         self.responseEvent.clear()
         self.requestSentTime = time.time()
-      print(
-          f"Node {self.id} sending REQUEST to leader Node {targetId} and awaiting REPLY...")
 
-    # 2. Send the message (using the existing, now    modified, sendMessage)
+      print(f"Node {self.id} sending REQUEST to leader Node {targetId} and awaiting REPLY...")
+
+    # 2. Send the message to the target node
     self.sendMessage(targetId, msg)
 
     # 3. Wait for the response if it was a leader check
-    if is_leader_check:
+    if is_leader:
       event_set = self.responseEvent.wait(timeout=timeout)
 
       with self.stateLock:
-        self.awaitingReplyFrom = None  # Clear expectation
-
-        if not event_set or not self.requestReceived:
-          # Leader failure detected!
-          print(
-              f"Node {self.id} failed to get REPLY from leader Node {targetId} within {timeout}s.")
+        # 4. Check if we got the expected reply
+        if not event_set or not self.gotReply:
+          print(f"Node {self.id} failed to get REPLY from leader Node {targetId} within {timeout}s.")
           self.leaderId = None
 
           if self.status != "Election":
-            print(
-                f"Node {self.id} starting election due to leader unresponsiveness.")
-            threading.Thread(
-                target=self.startElection, args=(self.knownNodes,), daemon=True
-            ).start()
+          # Leader failure detected!
+            print(f"Node {self.id} starting election due to leader unresponsiveness.")
+            threading.Thread(target=self.startElection, args=(self.knownNodes,), daemon=True).start()
+          else:
+            print(f"Node {self.id} is already in an election, not starting another.")
         else:
-          print(
-              f"Node {self.id} successfully received REPLY from leader Node {targetId}.")
-
-      return self.requestReceived  # Return success/failure
-
+          print(f"Node {self.id} successfully received REPLY from leader Node {targetId}.")
+      
+      return self.gotReply  # Return success/failure
+    
     return True  # For non-REQUEST messages or non-leader targets, we assume success after send
 
   def restart(self):
@@ -335,8 +333,7 @@ if __name__ == "__main__":
 
         try:
           targetId = int(full_cmd[1])
-          node.sendAndWaitForReply(
-              targetId, Message("REQUEST", nodeId, targetId))
+          node.sendAndWaitForReply(targetId, Message("REQUEST", nodeId, targetId))
         except ValueError:
           print("Invalid target node ID.")
 
