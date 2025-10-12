@@ -20,6 +20,7 @@ from src.message import Message
 PORT_BASE = 5000
 SIM_PORT = 6000
 
+
 class Node:
   def __init__(self, nodeId, knownNodes):
     self.id = nodeId
@@ -30,7 +31,7 @@ class Node:
     self.leaderId = None
     self.receivedOk = False
     self.alive = True
-    
+
     self.electionRunning = False
     # List to hold IDs of nodes that sent an OK during an election
     self.gotAcknowledgementFrom = -1
@@ -303,15 +304,16 @@ class Node:
     if self.alive:
       print(f"Node {self.id} is already running.")
       return
-    
+
     self.alive = True
     self.status = "Normal"
     # Restart listening and processing threads
     threading.Thread(target=self.processMessages, daemon=True).start()
-    
+    threading.Thread(target=self.listen, daemon=True).start()
+
     print(f"Node {self.id} has restarted.")
-    
-    #Since node was restarted, an election should be started to find current leader
+
+    # Since node was restarted, an election should be started to find current leader
     self.startElection(self.knownNodes)
 
   def fail(self):
@@ -320,22 +322,27 @@ class Node:
     self.leaderId = None
     self.status = "Down"
     print(f"Node {self.id} is shutting down.")
-    # Shutdown listening and processing threads
-    
+
+
 if __name__ == "__main__":
   if len(sys.argv) < 3:
     print("Usage: python node.py <nodeId> <numberOfKnownNodes>")
     sys.exit(1)
 
   nodeId = int(sys.argv[1])
-  knownNodes = list(range(1, int(sys.argv[2]) + 1)) # Nodes are numbered 1..N
+  knownNodes = list(range(1, int(sys.argv[2]) + 1))  # Nodes are numbered 1..N
 
   node = Node(nodeId, knownNodes)
 
   # Manual control loop
   try:
     while True:
-      cmd = input(f"Node {nodeId} > ").strip()
+      full_cmd = input(f"Node {nodeId} > ").strip().split()
+
+      if not full_cmd:
+        continue
+
+      cmd = full_cmd[0].lower()
 
       # autopep8: off
       if cmd == "election":
@@ -356,8 +363,16 @@ if __name__ == "__main__":
           print(f"Node {nodeId} is already alive.")
 
       elif cmd == "contact":
-        targetId = int(input("Enter target node ID: "))
-        node.sendAndWaitForReply(targetId, Message("REQUEST", nodeId, targetId))
+        if len(full_cmd) < 2 or not full_cmd[1].isdigit():
+          print("Usage: contact <targetNodeId>")
+          continue
+
+        try:
+          targetId = int(full_cmd[1])
+          node.sendAndWaitForReply(
+              targetId, Message("REQUEST", nodeId, targetId))
+        except ValueError:
+          print("Invalid target node ID.")
 
       elif cmd == "exit":
         node.alive = False
@@ -365,9 +380,7 @@ if __name__ == "__main__":
 
       else:
         print("Invalid command")
-        
-        
+
   except KeyboardInterrupt:
     node.alive = False
     print(f"\nNode {nodeId} is shutting down.")
-    

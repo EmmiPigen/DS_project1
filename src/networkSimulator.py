@@ -25,7 +25,7 @@ class NetworkSimulator:
     # Start thread that delivers messages
     threading.Thread(target=self.deliverMessages, daemon=True).start()
 
-    print(f"Network Simulator is running on Port {SIM_PORT}")
+    print(f"Network Simulator is running on Port {SIM_PORT}, with nodes: {self.knownNodes}")
 
   def listen(self):
     """Receives all incoming messages from the connected nodes."""
@@ -145,7 +145,7 @@ class NetworkSimulator:
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
-    print("Usage: python networkSimulator.py <numberOfKnownNodes>")
+    print("Usage: python networkSimulator.py <Nodes>")
     sys.exit(1)
 
   knownNodes = list(range(1, int(sys.argv[1]) + 1)) # Nodes are numbered 1..N

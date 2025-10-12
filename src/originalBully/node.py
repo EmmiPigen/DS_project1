@@ -3,6 +3,7 @@
 # src/originalBully/node.py
 
 # Node class for the bully algorithm.
+from src.message import Message
 import time
 import json
 import threading
@@ -13,7 +14,6 @@ import sys
 
 sys.path.append(os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', '..')))
-from src.message import Message
 
 
 PORT_BASE = 5000
@@ -61,7 +61,7 @@ class Node:
         conn.close()
       except socket.timeout:
         continue
-    
+
   def getId(self):
     return self.id
 
@@ -266,15 +266,15 @@ class Node:
     if self.alive:
       print(f"Node {self.id} is already running.")
       return
-    
+
     self.alive = True
     self.status = "Normal"
     # Restart listening and processing threads
     threading.Thread(target=self.processMessages, daemon=True).start()
-    
+
     print(f"Node {self.id} has restarted.")
-    
-    #Since node was restarted, an election should be started to find current leader
+
+    # Since node was restarted, an election should be started to find current leader
     self.startElection(self.knownNodes)
 
   def fail(self):
@@ -284,47 +284,65 @@ class Node:
     self.status = "Down"
     print(f"Node {self.id} is shutting down.")
     # Shutdown listening and processing threads
-    
 
 
-  
-  
 if __name__ == "__main__":
   if len(sys.argv) < 3:
     print("Usage: python node.py <nodeId> <numberOfKnownNodes>")
     sys.exit(1)
 
   nodeId = int(sys.argv[1])
-  knownNodes = list(range(1, int(sys.argv[2]) + 1)) # Nodes are numbered 1..N
+  knownNodes = list(range(1, int(sys.argv[2]) + 1))  # Nodes are numbered 1..N
 
   node = Node(nodeId, knownNodes)
 
   # Manual control loop
-  while True:
-    cmd = input(f"Node {nodeId} > ").strip()
+  try:
+    while True:
+      full_cmd = input(f"Node {nodeId} > ").strip().split()
 
-    if cmd == "election":
+      if not full_cmd:
+        continue
+
+      cmd = full_cmd[0].lower()
+
       # autopep8: off
-      threading.Thread(target=node.startElection, args=(node.knownNodes,), daemon=True).start()
+      if cmd == "election":
+        threading.Thread(target=node.startElection, args=(node.knownNodes,), daemon=True).start()
       # autopep8: on
 
-    elif cmd == "status":
-      print(f"Node {nodeId} status: {node.status}, Leader: {node.leaderId}")
-      print(f"Known nodes: {node.knownNodes}")
+      elif cmd == "status":
+        print(f"Node {nodeId} status: {node.status}, Leader: {node.leaderId}")
+        print(f"Known nodes: {node.knownNodes}")
 
-    elif cmd == "die":
-      node.fail()
+      elif cmd == "die":
+        node.fail()
 
-    elif cmd == "revive":
-      node.restart()
+      elif cmd == "revive":
+        if not node.alive:
+          node.restart()
+        else:
+          print(f"Node {nodeId} is already alive.")
 
-    elif cmd == "contact":
-      targetId = int(input("Enter target node ID: "))
-      node.sendAndWaitForReply(targetId, Message("REQUEST", nodeId, targetId))
+      elif cmd == "contact":
+        if len(full_cmd) < 2 or not full_cmd[1].isdigit():
+          print("Usage: contact <targetNodeId>")
+          continue
 
-    elif cmd == "exit":
-      node.alive = False
-      break
+        try:
+          targetId = int(full_cmd[1])
+          node.sendAndWaitForReply(
+              targetId, Message("REQUEST", nodeId, targetId))
+        except ValueError:
+          print("Invalid target node ID.")
 
-    else:
-      print("Invalid command")
+      elif cmd == "exit":
+        node.alive = False
+        break
+
+      else:
+        print("Invalid command")
+
+  except KeyboardInterrupt:
+    node.alive = False
+    print(f"\nNode {nodeId} is shutting down.")

@@ -9,15 +9,29 @@ The implementation was created in python 3.13 and the node utilizes the `socket`
 To run the implementation, navigate to the `src` folder in your terminal and run the `network_simulator.py` file using the command:
 
 ```bash
-python network_simulator.py <knownNode1> <knownNode2> ...
+python network_simulator.py <numberOfKnownNodes> 
 ```
 
-Where `<knownNode1> <knownNode2> ...` are the node id for the number of nodes you want to create in the network. For example, to create a network with 5 nodes, you would run:
+Where `<numberOfKnownNodes>` are the number of nodes you want to create in the network. For example, to create 5 nodes, you would run:
 
 ```bash
-python network_simulator.py 1 2 3 4 5
+python network_simulator.py 5
 ```
 
-This will start the network simulator and tell it that 5 nodes will be created with the ids 1, 2, 3, 4 and 5. 
+This will start the network simulator and initialize with the specified number of nodes as known nodes.
 
-Next you will need to 
+The nodes themselves have to be started manually in separate terminal windows. The process is the same for both the original and improved Bully algorithm.
+
+open a new terminal window and navigate to the `src/originalBully` or `src/improvedBully` folder, depending on which implementation you want to run. Then, run the `node.py` file using the command:
+
+```bash
+python node.py <nodeId> <numberOfKnownNodes>
+```
+
+Where `<nodeId>` is the ID of the node you want to start (from 1 to N) and `<numberOfKnownNodes>` is the total number of nodes in the network. For example, to start node 1 in a network with 5 nodes, you would run:
+```
+python node.py 1 5
+```
+Each node will start and listen for messages from the network simulator and respond accordingly.
+
+The nodes include commands that can be entered in the terminal to start an election, "kill" the node (simulating a failure), or "revive" the node (simulating a recovery), sending a "REQUEST REPLY" message to a specific node, e.g. "contact  
