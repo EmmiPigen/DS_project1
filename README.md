@@ -34,4 +34,8 @@ python node.py 1 5
 ```
 Each node will start and listen for messages from the network simulator and respond accordingly.
 
-The nodes include commands that can be entered in the terminal to start an election, "kill" the node (simulating a failure), or "revive" the node (simulating a recovery), sending a "REQUEST REPLY" message to a specific node, e.g. "contact  
+The nodes include commands that can be entered in the terminal to start an election, "kill" the node (simulating a failure), or "revive" the node (simulating a recovery), sending a "REQUEST REPLY" message to a specific node, e.g. "contact 3" to send a message to node 3.
+
+The commands are:
+- `election`: Start an election
+- `status`: Print the status of the node (its ID, 

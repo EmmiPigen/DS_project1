@@ -312,8 +312,12 @@ if __name__ == "__main__":
       # autopep8: on
 
       elif cmd == "status":
-        print(f"Node {nodeId} status: {node.status}, Leader: {node.leaderId}")
-        print(f"Known nodes: {node.knownNodes}")
+        print(f" \
+              Node: {nodeId},\n \
+              Known nodes: {node.knownNodes},\n \
+              status: {node.status},\n \
+              Alive: {node.alive},\n \
+              Leader: {node.leaderId}")
 
       elif cmd == "die":
         node.fail()
