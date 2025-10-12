@@ -9,10 +9,12 @@ The implementation was created in python 3.13 and the node utilizes the `socket`
 To run the implementation, navigate to the `src` folder in your terminal and run the `network_simulator.py` file using the command:
 
 ```bash
-python network_simulator.py <numberOfKnownNodes> 
+python network_simulator.py <numberOfKnownNodes> <minDelay> <maxDelay>
 ```
 
-Where `<numberOfKnownNodes>` are the number of nodes you want to create in the network. For example, to create 5 nodes, you would run:
+Where `<numberOfKnownNodes>` are the number of nodes you want to create in the network. `<minDelay>` and `<maxDelay>` are optional parameters to set the minimum and maximum delay (in seconds) for message delivery in the network simulator. If not provided, the default values are 1 and 5 seconds, respectively. 
+
+For example, to create 5 nodes, you would run:
 
 ```bash
 python network_simulator.py 5
@@ -51,6 +53,12 @@ Unit tests for both implementations can be found in the `tests` folder inside ea
 python -m unittest .\unitTest.py
 ```
 This will run all the unit tests and display the results in the terminal.
+
+System tests for both implementations can also be found in the `tests` folder inside each implementation folder. The tests can be run using the command:
+
+```bash
+pytest -v .\systemTest.py
+```
 
 ## Note 
 The implementation is a simulation and does not handle all edge cases or failures that may occur in a real distributed system. It is intended for educational purposes to demonstrate the Bully Election Algorithm and its improved version.
