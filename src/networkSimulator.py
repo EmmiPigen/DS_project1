@@ -148,8 +148,8 @@ class NetworkSimulator:
 
 
 if __name__ == "__main__":
-  if len(sys.argv) < 4:
-    print("Usage: python networkSimulator.py <Nodes> <minDelay> <maxDelay>")
+  if len(sys.argv) < 2:
+    print("Usage: python networkSimulator.py <Nodes> [<minDelay>] [<maxDelay>]")
     sys.exit(1)
 
   knownNodes = list(range(1, int(sys.argv[1]) + 1))  # Nodes are numbered 1..N
