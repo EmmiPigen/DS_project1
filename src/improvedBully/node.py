@@ -23,7 +23,7 @@ socket.setdefaulttimeout(2)
 PORT_BASE = 5000
 SIM_PORT = 6000
 
-
+  
 class Node:
   def __init__(self, nodeId, knownNodes):
     self.id = nodeId

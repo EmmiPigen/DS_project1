@@ -59,7 +59,7 @@ class NetworkSimulator:
         continue
 
   def scheduleDelivery(self, raw_msg):
-    """Schedules a message for delivery with random delay and possible drop."""
+    """Schedules a message for delivery with random delay"""
     try:
       msg_data = json.loads(raw_msg)
 
@@ -148,7 +148,7 @@ class NetworkSimulator:
 
 
 if __name__ == "__main__":
-  if len(sys.argv) < 2:
+  if len(sys.argv) < 4:
     print("Usage: python networkSimulator.py <Nodes> <minDelay> <maxDelay>")
     sys.exit(1)
 
