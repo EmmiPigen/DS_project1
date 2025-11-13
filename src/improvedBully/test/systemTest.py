@@ -17,8 +17,6 @@ import pytest
 import os
 import sys
 
-from torch import le
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
 from src.improvedBully.node import Node, PORT_BASE, SIM_PORT
